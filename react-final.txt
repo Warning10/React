@@ -1,0 +1,495 @@
+npx create-react-app appointments-app
+cd appointments-app
+
+
+npm install axios formik yup react-router-dom bootstrap react-bootstrap toastr
+
+
+npm install -g json-server
+
+{
+  "appointments": [],
+  "diseases": ["Fever", "Cough", "Diabetes", "Migraine"]
+}
+
+
+json-server --watch db.json --port 5000
+
+
+src/
+|-- components/
+|   |-- Header.js
+|   |-- Footer.js
+|   |-- Login.js
+|   |-- Appointments.js
+|   |-- AppointmentForm.js
+|-- services/
+|   |-- api.js
+|-- App.js
+|-- index.js
+|-- custom.module.css
+
+
+import axios from 'axios';
+
+const API_URL = 'http://localhost:5000';
+
+export const login = async (email, password) => {
+  // Mocking a login for simplicity
+  const users = [{ email: 'admin@example.com', password: 'admin' }];
+  const user = users.find(user => user.email === email && user.password === password);
+  if (user) {
+    return { email: user.email, firstName: 'Admin', lastName: 'User' };
+  } else {
+    throw new Error('Invalid email or password');
+  }
+};
+
+export const getAppointments = async () => {
+  const response = await axios.get(`${API_URL}/appointments`);
+  return response.data;
+};
+
+export const getDiseases = async () => {
+  const response = await axios.get(`${API_URL}/diseases`);
+  return response.data;
+};
+
+export const addAppointment = async (appointment) => {
+  const response = await axios.post(`${API_URL}/appointments`, appointment);
+  return response.data;
+};
+
+export const updateAppointment = async (id, appointment) => {
+  const response = await axios.put(`${API_URL}/appointments/${id}`, appointment);
+  return response.data;
+};
+
+export const deleteAppointment = async (id) => {
+  await axios.delete(`${API_URL}/appointments/${id}`);
+};
+
+export const getAppointmentById = async (id) => {
+  const response = await axios.get(`${API_URL}/appointments/${id}`);
+  return response.data;
+};
+
+
+
+
+
+
+
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { useHistory } from 'react-router-dom';
+
+const Header = ({ user, onLogout }) => {
+  const history = useHistory();
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    onLogout();
+    history.push('/login');
+  };
+
+  return (
+    <header className="header">
+      <div className="container">
+        <img src="logo.png" alt="Company Logo" className="logo" />
+        <h1>Company Name</h1>
+        {user && (
+          <div>
+            <span>Welcome {user.firstName} {user.lastName}</span>
+            <button onClick={handleLogout} className="btn btn-link">Logout</button>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+};
+
+export default Header;
+
+
+
+
+
+
+import React from 'react';
+
+const Footer = () => (
+  <footer className="footer">
+    <div className="container">
+      <p>&copy; 2024 Company Name. All rights reserved.</p>
+    </div>
+  </footer>
+);
+
+export default Footer;
+
+
+
+
+import React from 'react';
+import { Formik, Form, Field } from 'formik';
+import * as Yup from 'yup';
+import { useHistory } from 'react-router-dom';
+import { login } from '../services/api';
+import toastr from 'toastr';
+
+const Login = ({ onLogin }) => {
+  const history = useHistory();
+
+  const handleSubmit = async (values, { setSubmitting }) => {
+    try {
+      const user = await login(values.email, values.password);
+      localStorage.setItem('user', JSON.stringify(user));
+      onLogin(user);
+      toastr.success('Login successful');
+      history.push('/appointments');
+    } catch (error) {
+      toastr.error(error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const validationSchema = Yup.object({
+    email: Yup.string().email('Invalid email').required('Required'),
+    password: Yup.string().required('Required'),
+  });
+
+  return (
+    <div className="login-page">
+      <h2>Login</h2>
+      <Formik
+        initialValues={{ email: '', password: '' }}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+      >
+        {({ isSubmitting }) => (
+          <Form>
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <Field type="email" name="email" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <Field type="password" name="password" className="form-control" />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              Login
+            </button>
+          </Form>
+        )}
+      </Formik>
+    </div>
+  );
+};
+
+export default Login;
+
+
+
+import React, { useState, useEffect } from 'react';
+import { Link, useHistory } from 'react-router-dom';
+import { getAppointments, deleteAppointment } from '../services/api';
+import toastr from 'toastr';
+
+const Appointments = () => {
+  const [appointments, setAppointments] = useState([]);
+  const history = useHistory();
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      const data = await getAppointments();
+      setAppointments(data);
+    };
+
+    fetchAppointments();
+  }, []);
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this appointment?')) {
+      try {
+        await deleteAppointment(id);
+        setAppointments(appointments.filter(appointment => appointment.id !== id));
+        toastr.success('Appointment deleted successfully');
+      } catch (error) {
+        toastr.error('Failed to delete appointment');
+      }
+    }
+  };
+
+  return (
+    <div className="appointments-page">
+      <h2>List of Appointments</h2>
+      <Link to="/appointment/new" className="btn btn-primary">Add Appointment</Link>
+      <table className="table table-striped">
+        <thead>
+          <tr>
+            <th>First Name</th>
+            <th>Last Name</th>
+            <th>Mobile Number</th>
+            <th>Birth Date</th>
+            <th>Gender</th>
+            <th>Disease</th>
+            <th>Appointment Date and Time</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {appointments.map(appointment => (
+            <tr key={appointment.id}>
+              <td>{appointment.firstName}</td>
+              <td>{appointment.lastName}</td>
+              <td>{appointment.mobileNumber}</td>
+              <td>{appointment.birthDate}</td>
+              <td>{appointment.gender}</td>
+              <td>{appointment.disease}</td>
+              <td>{appointment.appointmentDateTime}</td>
+              <td>
+                <Link to={`/appointment/${appointment.id}/edit`} className="btn btn-link">Edit</Link>
+                <button onClick={() => handleDelete(appointment.id)} className="btn btn-link">Delete</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default Appointments;
+
+
+
+import React, { useState, useEffect } from 'react';
+import { Formik, Form, Field } from 'formik';
+import * as Yup from 'yup';
+import { useParams, useHistory } from 'react-router-dom';
+import { getDiseases, addAppointment, updateAppointment, getAppointmentById } from '../services/api';
+import toastr from 'toastr';
+
+const AppointmentForm = () => {
+  const [diseases, setDiseases] = useState([]);
+  const { id } = useParams();
+  const history = useHistory();
+  const isEdit = !!id;
+
+  useEffect(() => {
+    const fetchDiseases = async () => {
+      const data = await getDiseases();
+      setDiseases(data);
+    };
+
+    const fetchAppointment = async () => {
+      if (isEdit) {
+        const data = await getAppointmentById(id);
+        formik.setValues(data);
+      }
+    };
+
+    fetchDiseases();
+    fetchAppointment();
+  }, [id, isEdit]);
+
+  const validationSchema = Yup.object({
+    firstName: Yup.string().required('Required'),
+    lastName: Yup.string().required('Required'),
+    mobileNumber: Yup.string().matches(/^[0-9]{10}$/, 'Must be a valid 10 digit mobile number').required('Required'),
+    birthDate: Yup.date().max(new Date(), 'Birth date must be in the past').required('Required'),
+    gender: Yup.string().required('Required'),
+    disease: Yup.string().required('Required'),
+    history: Yup.string().required('Required'),
+    appointmentDateTime: Yup.date().min(new Date(), 'Appointment date and time must be in the future').required('Required'),
+  });
+
+  const handleSubmit = async (values, { setSubmitting }) => {
+    try {
+      if (isEdit) {
+        await updateAppointment(id, values);
+        toastr.success('Appointment updated successfully');
+      } else {
+        await addAppointment(values);
+        toastr.success('Appointment added successfully');
+      }
+      history.push('/appointments');
+    } catch (error) {
+      toastr.error('Failed to save appointment');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="appointment-form-page">
+      <h2>{isEdit ? 'Edit Appointment' : 'Add Appointment'}</h2>
+      <Formik
+        initialValues={{
+          firstName: '',
+          lastName: '',
+          mobileNumber: '',
+          birthDate: '',
+          gender: '',
+          disease: '',
+          history: '',
+          appointmentDateTime: '',
+        }}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+      >
+        {({ isSubmitting }) => (
+          <Form>
+            <div className="form-group">
+              <label htmlFor="firstName">First Name</label>
+              <Field type="text" name="firstName" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="lastName">Last Name</label>
+              <Field type="text" name="lastName" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="mobileNumber">Mobile Number</label>
+              <Field type="text" name="mobileNumber" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="birthDate">Birth Date</label>
+              <Field type="date" name="birthDate" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label>Gender</label>
+              <div>
+                <Field type="radio" name="gender" value="Male" /> Male
+                <Field type="radio" name="gender" value="Female" /> Female
+              </div>
+            </div>
+            <div className="form-group">
+              <label htmlFor="disease">Disease</label>
+              <Field as="select" name="disease" className="form-control">
+                <option value="">Select Disease</option>
+                {diseases.map(disease => (
+                  <option key={disease} value={disease}>{disease}</option>
+                ))}
+              </Field>
+            </div>
+            <div className="form-group">
+              <label htmlFor="history">History</label>
+              <Field as="textarea" name="history" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="appointmentDateTime">Appointment Date and Time</label>
+              <Field type="datetime-local" name="appointmentDateTime" className="form-control" />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              Save
+            </button>
+            <button type="reset" className="btn btn-secondary">
+              Reset
+            </button>
+          </Form>
+        )}
+      </Formik>
+    </div>
+  );
+};
+
+export default AppointmentForm;
+
+
+
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Route, Switch, Redirect } from 'react-router-dom';
+import Header from './components/Header';
+import Footer from './components/Footer';
+import Login from './components/Login';
+import Appointments from './components/Appointments';
+import AppointmentForm from './components/AppointmentForm';
+import './custom.module.css';
+
+const App = () => {
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
+
+  const handleLogin = (user) => {
+    setUser(user);
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+  };
+
+  return (
+    <Router>
+      <div className="app">
+        <Header user={user} onLogout={handleLogout} />
+        <div className="container">
+          <Switch>
+            <Route path="/login">
+              {user ? <Redirect to="/appointments" /> : <Login onLogin={handleLogin} />}
+            </Route>
+            <Route path="/appointments">
+              {user ? <Appointments /> : <Redirect to="/login" />}
+            </Route>
+            <Route path="/appointment/new">
+              {user ? <AppointmentForm /> : <Redirect to="/login" />}
+            </Route>
+            <Route path="/appointment/:id/edit">
+              {user ? <AppointmentForm /> : <Redirect to="/login" />}
+            </Route>
+            <Redirect from="/" to="/login" />
+          </Switch>
+        </div>
+        <Footer />
+      </div>
+    </Router>
+  );
+};
+
+export default App;
+
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.footer {
+  text-align: center;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+}
+
+.login-page, .appointment-form-page, .appointments-page {
+  max-width: 600px;
+  margin: 50px auto;
+  padding: 20px;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  background-color: #fff;
+}
+
+.btn-link {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+
+json-server --watch db.json --port 5000
+
+
+npm start
+
+
